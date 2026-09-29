@@ -2,10 +2,13 @@ const { enviarMensajeTexto } = require('../services/whatsappService');
 
 // Lista de números de Colombia autorizados (sin el signo +)
 const numerosAutorizados = [
-  '573104665545' // Agregado tal cual viene en el objeto 'from'
+  '573104665545',
+  '573205175007',
+  '573177980579',
+  '573234422815',
+  '573127689876',
+  '573143366528'
 ];
-
-const respuestaEspecifica = '¡Hola Juan! Recibí tu mensaje correctamente desde el Webhook de Meta.';
 
 const verificarWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -33,6 +36,8 @@ const recibirMensaje = async (req, res) => {
   // 1. Responder 200 OK inmediatamente a Meta
   res.status(200).send('EVENT_RECEIVED');
 
+
+
   try {
     const body = req.body;
 
@@ -53,6 +58,8 @@ const recibirMensaje = async (req, res) => {
       // Verificar si el remitente está en la lista permitida
       const estaAutorizado = numerosAutorizados.includes(remitente);
 
+      const respuestaEspecifica = '¡Hola ' + nombreUsuario + '! Recibí tu mensaje correctamente desde el Webhook de Meta.';
+
       if (estaAutorizado) {
         console.log(`[AUTORIZADO] Enviando respuesta automática a ${remitente}...`);
         await enviarMensajeTexto(remitente, respuestaEspecifica);
@@ -69,3 +76,4 @@ module.exports = {
   verificarWebhook,
   recibirMensaje
 };
+
