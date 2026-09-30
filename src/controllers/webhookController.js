@@ -1,4 +1,4 @@
-const { enviarMensajeTexto } = require('../services/whatsappService');
+const botService = require('../services/bot.service');
 
 const verificarWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -36,13 +36,13 @@ const recibirMensaje = async (req, res) => {
       const textoMensaje = message.text.body;
       const nombreUsuario = value.contacts?.[0]?.profile?.name || 'Usuario';
 
+      await botService.procesarMensaje(remitente, textoMensaje, nombreUsuario);
+
       console.log(`\n[MENSAJE DETECTADO] De: ${nombreUsuario} (${remitente}) | Texto: "${textoMensaje}"`);
 
       // Enviar la respuesta directamente a cualquier remitente
-      const respuestaEspecifica = `¡Hola ${nombreUsuario}! Recibí tu mensaje correctamente desde el Webhook de Meta.`;
 
       console.log(`[ENVIANDO RESPUESTA] A: ${remitente}...`);
-      await enviarMensajeTexto(remitente, respuestaEspecifica);
     }
   } catch (error) {
     console.error('Error procesando el payload del Webhook:', error.message);
