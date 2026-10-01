@@ -3,36 +3,63 @@ const sessionService = require('./session.service');
 const whatsappService = require('./whatsapp.service');
 
 async function procesarMensaje(telefono, texto, nombreUsuario) {
-  // 1. Obtener el estado actual (verifica expiraciones automáticamente)
+  // 1. Obtener estado actual de la sesión
   const usuario = await sessionService.obtenerEstadoUsuario(telefono);
-  const mensajeLimpio = texto.trim().toLowerCase();
+  
+  // Normalizar la entrada para comparar IDs de botones o texto escrito
+  const entrada = texto ? texto.trim().toLowerCase() : '';
+  const linkPoliticas = "https://drive.google.com/file/d/aqui-va-el-link/view?usp=sharing";
 
-  // 2. Control del flujo según el estado
+  // 2. Control del flujo
   switch (usuario.estado) {
     case sessionService.ESTADOS.PENDIENTE_POLITICAS:
-      if (mensajeLimpio === '1' || mensajeLimpio === 'si' || mensajeLimpio === 'sí') {
+      
+      // -------------------------------------------------------------
+      // CONDICIONAL 1: El usuario presionó "Sí, Acepto" (o escribió 1 / Sí)
+      // -------------------------------------------------------------
+      if (entrada === 'btn_acepto' || entrada === '1' || entrada === 'si' || entrada === 'sí') {
+        
+        // A. Guardar cambio de estado
         await sessionService.actualizarEstado(telefono, sessionService.ESTADOS.ACEPTADO);
-        await whatsappService.enviarTexto(
-          telefono, 
-          `¡Gracias por aceptar ${nombreUsuario}! ¿En qué te podemos colaborar hoy?`
-        );
-      } else if (mensajeLimpio === '2' || mensajeLimpio === 'no') {
+        console.log(`[POLITICAS] Usuario ${telefono} ACEPTÓ los términos.`);
+
+        // B. SALTAR A LA SIGUIENTE ACCIÓN (Ej: Menú Principal o Bienvenida)
+        await ejecutarSiguienteAccion(telefono, nombreUsuario);
+      } 
+      
+      // -------------------------------------------------------------
+      // CONDICIONAL 2: El usuario presionó "No Acepto" (o escribió 2 / No)
+      // -------------------------------------------------------------
+      else if (entrada === 'btn_rechazo' || entrada === '2' || entrada === 'no') {
+        
+        // A. Guardar estado rechazado
         await sessionService.actualizarEstado(telefono, sessionService.ESTADOS.RECHAZADO);
+        console.log(`[POLITICAS] Usuario ${telefono} RECHAZÓ los términos.`);
+
+        // B. Acción de fin de conversación
         await whatsappService.enviarTexto(
           telefono, 
-          "Has rechazado el tratamiento de datos. No podemos continuar con la atención."
+          "Has rechazado la política de tratamiento de datos. No podemos continuar con la atención."
         );
-      } else {
-        // Solicitud de confirmación inicial o respuesta no válida
-        await whatsappService.enviarTexto(
-          telefono, 
-          `Hola ${nombreUsuario}, para continuar debes autorizar nuestra política de privacidad de datos.\n\nResponde:\n1. Si acepto\n2. No acepto`
-        );
+      } 
+      
+      // -------------------------------------------------------------
+      // CONDICIONAL 3: Primer contacto (Enviar los botones de confirmación)
+      // -------------------------------------------------------------
+      else {
+        const mensajePoliticas = `¡Hola ${nombreUsuario}! 👋\n\nAntes de comenzar, necesitamos tu confirmación respecto a nuestra política de tratamiento de datos personales.\n\nPuedes leer el documento aquí:\n📄 ${linkPoliticas}\n\n¿Aceptas nuestros términos y condiciones?`;
+
+        const botones = [
+          { id: 'btn_acepto', title: 'Sí, Acepto' },
+          { id: 'btn_rechazo', title: 'No Acepto' }
+        ];
+
+        await whatsappService.enviarMensajeBotones(telefono, mensajePoliticas, botones);
       }
       break;
 
     case sessionService.ESTADOS.ACEPTADO:
-      // Aquí colocas el menú principal o las respuestas de tu negocio
+      // Si el usuario ya aceptó y sigue escribiendo mensajes posteriormente
       await whatsappService.enviarTexto(
         telefono, 
         `Procesando tu consulta: "${texto}"`
@@ -42,12 +69,19 @@ async function procesarMensaje(telefono, texto, nombreUsuario) {
     case sessionService.ESTADOS.RECHAZADO:
       // Si vuelve a escribir tras haber rechazado
       await sessionService.actualizarEstado(telefono, sessionService.ESTADOS.PENDIENTE_POLITICAS);
-      await whatsappService.enviarTexto(
-        telefono, 
-        `Hola ${nombreUsuario}. Para recibir atención debes aceptar nuestra política de datos.\n\nResponde:\n1. Acepto\n2. Rechazo`
-      );
+      await procesarMensaje(telefono, '', nombreUsuario); // Reintenta enviando de nuevo los botones
       break;
   }
+}
+
+// -------------------------------------------------------------------
+// FUNCIÓN AUXILIAR: Siguiente Acción tras Aceptar Políticas
+// -------------------------------------------------------------------
+async function ejecutarSiguienteAccion(telefono, nombreUsuario) {
+  // Aquí defines lo que pasa Inmediatamente después de aceptar (ejemplo: enviar menú)
+  const mensajeBienvenida = `¡Gracias por aceptar, ${nombreUsuario}! 🎉\n\n¿En qué te podemos ayudar hoy?\n1. Ver Productos\n2. Hablar con un asesor\n3. Consultar horario`;
+  
+  await whatsappService.enviarTexto(telefono, mensajeBienvenida);
 }
 
 module.exports = {

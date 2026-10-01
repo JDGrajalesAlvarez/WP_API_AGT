@@ -1,3 +1,4 @@
+// controllers/webhook.controller.js
 const botService = require('../services/bot.service');
 
 const verificarWebhook = (req, res) => {
@@ -18,31 +19,42 @@ const verificarWebhook = (req, res) => {
 };
 
 const recibirMensaje = async (req, res) => {
-  // 1. Responder 200 OK inmediatamente a Meta para no bloquear la petición
   res.status(200).send('EVENT_RECEIVED');
 
   try {
     const body = req.body;
-
-    // Extraer la estructura del mensaje del payload de Meta
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const message = value?.messages?.[0];
+    console.log(message);
+    
+    if (message) {
+      // 1. Extraer el identificador del remitente en orden de prioridad
+      const remitente = 
+        value.contacts?.[0]?.wa_id || 
+        message.from || 
+        message.from_user_id || 
+        value.contacts?.[0]?.user_id;
 
-    // Verificar que sea un mensaje de texto entrante
-    if (message && message.type === 'text') {
-      const remitente = message.from;
-      const textoMensaje = message.text.body;
-      const nombreUsuario = value.contacts?.[0]?.profile?.name || 'Usuario';
+      const nombreUsuario = 
+        value.contacts?.[0]?.profile?.name || 
+        value.contacts?.[0]?.profile?.username || 
+        'Usuario';
 
-      await botService.procesarMensaje(remitente, textoMensaje, nombreUsuario);
+      let textoMensaje = '';
 
-      console.log(`\n[MENSAJE DETECTADO] De: ${nombreUsuario} (${remitente}) | Texto: "${textoMensaje}"`);
+      if (message.type === 'text') {
+        textoMensaje = message.text?.body;
+      } else if (message.type === 'interactive' && message.interactive?.type === 'button_reply') {
+        textoMensaje = message.interactive.button_reply?.id;
+      }
 
-      // Enviar la respuesta directamente a cualquier remitente
+      console.log(`[DEBUG] Remitente detectado: ${remitente} | Texto: "${textoMensaje}"`);
 
-      console.log(`[ENVIANDO RESPUESTA] A: ${remitente}...`);
+      if (remitente && textoMensaje) {
+        await botService.procesarMensaje(remitente, textoMensaje, nombreUsuario);
+      }
     }
   } catch (error) {
     console.error('Error procesando el payload del Webhook:', error.message);
