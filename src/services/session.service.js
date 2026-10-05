@@ -33,7 +33,7 @@ async function obtenerEstadoUsuario(telefono) {
   const tiempoTranscurrido = Date.now() - usuario.ultimaInteraccion;
   
   if (usuario.estado === ESTADOS.ACEPTADO && tiempoTranscurrido > INACTIVITY_TIMEOUT_MS) {
-    console.log(`[SESSION] La sesión de ${telefono} ha expirado por inactividad.`);
+    // console.log(`[SESSION] La sesión de ${telefono} ha expirado por inactividad.`);
     
     // Reiniciamos al flujo de políticas/bienvenida
     usuario.estado = ESTADOS.PENDIENTE_POLITICAS;
@@ -56,7 +56,7 @@ async function actualizarEstado(telefono, nuevoEstado) {
   usuario.ultimaInteraccion = Date.now();
   
   sesiones.set(telefono, usuario);
-  console.log(`[SESSION] Estado actualizado para ${telefono}: ${nuevoEstado}`);
+  // console.log(`[SESSION] Estado actualizado para ${telefono}: ${nuevoEstado}`);
   
   return usuario;
 }

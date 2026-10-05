@@ -1,30 +1,57 @@
 // services/whatsapp.service.js
 const axios = require('axios');
 
-async function enviarMensajeBotones(to, textoCuerpo, botones) {
+async function enviarMensaje(destinatario, texto, botones = null, messageId = null) {
   try {
     const apiVersion = process.env.GRAPH_API_VERSION || 'v20.0';
     const phoneNumberId = process.env.PHONE_NUMBER_ID;
 
-    // Si el ID contiene letras/puntos (ej: CO.1090...), es un User ID de Meta
-    const esUserId = /[a-zA-Z\.]/.test(to);
+    if (!phoneNumberId || !process.env.WHATSAPP_TOKEN) {
+      throw new Error("Faltan variables de entorno: PHONE_NUMBER_ID o WHATSAPP_TOKEN");
+    }
+
+    const idLimpio = String(destinatario).trim();
+    const esBSUID = idLimpio.startsWith('CO.') || /[a-zA-Z]/.test(idLimpio);
 
     const payload = {
       messaging_product: 'whatsapp',
-      recipient_type: 'individual', // <-- OBLIGATORIO para permitir el envío a User IDs de Meta
-      to: to,
-      type: 'interactive',
-      interactive: {
+      recipient_type: 'individual'
+    };
+
+    // 1. ASIGNACIÓN CORRECTA DEL DESTINATARIO
+    if (esBSUID) {
+      payload.recipient = idLimpio; // Obligatorio para BSUIDs (CO...)
+    } else {
+      payload.to = idLimpio.replace(/\D/g, ''); // Para números de teléfono (57323...)
+    }
+
+    // 2. CONSTRUCCIÓN DEL TIPO DE MENSAJE
+    if (Array.isArray(botones) && botones.length > 0) {
+      payload.type = 'interactive';
+      payload.interactive = {
         type: 'button',
-        body: { text: textoCuerpo },
+        body: { text: texto },
         action: {
-          buttons: botones.map((btn) => ({
+          buttons: botones.slice(0, 3).map((btn) => ({
             type: 'reply',
-            reply: { id: btn.id, title: btn.title }
+            reply: {
+              id: String(btn.id).trim(),
+              title: String(btn.title).substring(0, 20).trim()
+            }
           }))
         }
-      }
-    };
+      };
+    } else {
+      payload.type = 'text';
+      payload.text = { body: texto };
+    }
+
+    // 3. CONTEXTO PARA VINCULAR CON EL MENSAJE ENTRANTE
+    if (messageId) {
+      payload.context = { message_id: messageId };
+    }
+
+    console.log(`[WA SERVICE] Payload final enviado a Meta:`, JSON.stringify(payload, null, 2));
 
     const response = await axios({
       method: 'POST',
@@ -33,49 +60,17 @@ async function enviarMensajeBotones(to, textoCuerpo, botones) {
         'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
         'Content-Type': 'application/json'
       },
-      data: payload
+      data: payload,
+      timeout: 10000
     });
 
-    console.log(`[WA SERVICE] Botones enviados a ${to}`);
+    console.log(`[WA SERVICE] Mensaje entregado con éxito a Meta para ${idLimpio}`);
     return response.data;
+
   } catch (error) {
     console.error('[WA SERVICE ERROR]:', error.response ? error.response.data : error.message);
     throw error;
   }
 }
 
-async function enviarTexto(to, texto) {
-  try {
-    const apiVersion = process.env.GRAPH_API_VERSION || 'v20.0';
-    const phoneNumberId = process.env.PHONE_NUMBER_ID;
-
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual', // <-- OBLIGATORIO
-      to: to,
-      type: 'text',
-      text: { body: texto }
-    };
-
-    const response = await axios({
-      method: 'POST',
-      url: `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
-      headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      data: payload
-    });
-
-    console.log(`[WA SERVICE] Texto enviado a ${to}`);
-    return response.data;
-  } catch (error) {
-    console.error('[WA SERVICE ERROR]:', error.response ? error.response.data : error.message);
-    throw error;
-  }
-}
-
-module.exports = {
-  enviarTexto,
-  enviarMensajeBotones
-};
+module.exports = { enviarMensaje };

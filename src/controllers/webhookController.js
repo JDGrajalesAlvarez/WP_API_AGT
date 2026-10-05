@@ -1,5 +1,5 @@
 // controllers/webhook.controller.js
-const botService = require('../services/bot.service');
+const botService = require("../services/bot.service");
 
 const verificarWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -7,7 +7,10 @@ const verificarWebhook = (req, res) => {
   const challenge = req.query["hub.challenge"];
 
   console.log("[DEBUG] Token recibido de Meta:", token);
-  console.log("[DEBUG] Token esperado (.env):", process.env.WEBHOOK_VERIFY_TOKEN);
+  console.log(
+    "[DEBUG] Token esperado (.env):",
+    process.env.WEBHOOK_VERIFY_TOKEN,
+  );
 
   if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
     console.log("[WEBHOOK VERIFICADO EXITOSAMENTE]");
@@ -19,7 +22,7 @@ const verificarWebhook = (req, res) => {
 };
 
 const recibirMensaje = async (req, res) => {
-  res.status(200).send('EVENT_RECEIVED');
+  res.status(200).send("EVENT_RECEIVED");
 
   try {
     const body = req.body;
@@ -27,41 +30,49 @@ const recibirMensaje = async (req, res) => {
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const message = value?.messages?.[0];
-    console.log(message);
-    
-    if (message) {
-      // 1. Extraer el identificador del remitente en orden de prioridad
-      const remitente = 
-        value.contacts?.[0]?.wa_id || 
-        message.from || 
-        message.from_user_id || 
-        value.contacts?.[0]?.user_id;
 
-      const nombreUsuario = 
-        value.contacts?.[0]?.profile?.name || 
-        value.contacts?.[0]?.profile?.username || 
-        'Usuario';
+    // En tu webhook controller / handler
+    const mensaje = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-      let textoMensaje = '';
+    if (mensaje) {
+      // Si viene 'from' (ej. '573237899017') lo usa; de lo contrario toma 'from_user_id' (ej. 'CO.1090585767180234')
+      const remitente = mensaje.from || mensaje.from_user_id;
+      const messageId = mensaje.id;
 
-      if (message.type === 'text') {
-        textoMensaje = message.text?.body;
-      } else if (message.type === 'interactive' && message.interactive?.type === 'button_reply') {
-        textoMensaje = message.interactive.button_reply?.id;
+      const nombreUsuario =
+        value.contacts?.[0]?.profile?.name ||
+        value.contacts?.[0]?.profile?.username ||
+        "Usuario";
+
+      // Extraer texto plano o ID de respuesta de botón
+      let texto = "";
+      if (mensaje.type === "text") {
+        texto = mensaje.text.body;
+      } else if (
+        mensaje.type === "interactive" &&
+        mensaje.interactive.button_reply
+      ) {
+        texto = mensaje.interactive.button_reply.id;
       }
 
-      console.log(`[DEBUG] Remitente detectado: ${remitente} | Texto: "${textoMensaje}"`);
+      console.log(
+        `[DEBUG] Remitente detectado: ${remitente} | Texto: "${texto}"`,
+      );
 
-      if (remitente && textoMensaje) {
-        await botService.procesarMensaje(remitente, textoMensaje, nombreUsuario);
-      }
+      // Procesar con la función agnóstica
+      await botService.procesarMensaje(
+        remitente,
+        texto,
+        nombreUsuario,
+        messageId,
+      );
     }
   } catch (error) {
-    console.error('Error procesando el payload del Webhook:', error.message);
+    console.error("Error procesando el payload del Webhook:", error.message);
   }
 };
 
 module.exports = {
   verificarWebhook,
-  recibirMensaje
+  recibirMensaje,
 };

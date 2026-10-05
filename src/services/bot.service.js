@@ -2,7 +2,7 @@
 const sessionService = require('./session.service');
 const whatsappService = require('./whatsapp.service');
 
-async function procesarMensaje(telefono, texto, nombreUsuario) {
+async function procesarMensaje(telefono, texto, nombreUsuario, messageId) {
   // 1. Obtener estado actual de la sesión
   const usuario = await sessionService.obtenerEstadoUsuario(telefono);
   
@@ -54,7 +54,7 @@ async function procesarMensaje(telefono, texto, nombreUsuario) {
           { id: 'btn_rechazo', title: 'No Acepto' }
         ];
 
-        await whatsappService.enviarMensajeBotones(telefono, mensajePoliticas, botones);
+        await whatsappService.enviarMensaje(telefono, mensajePoliticas, botones);
       }
       break;
 
