@@ -1,6 +1,10 @@
 // services/whatsapp.service.js
 const axios = require('axios');
 
+/**
+ * Despacha un mensaje (texto o interactivo con botones) a la API de Cloud WhatsApp.
+ * @returns {Promise<{wamid: string, rawPayload: object}>} Estructura limpia para la BD inmutable.
+ */
 async function enviarMensaje(destinatario, texto, botones = null, messageId = null) {
   try {
     const apiVersion = process.env.GRAPH_API_VERSION || 'v20.0';
@@ -46,7 +50,7 @@ async function enviarMensaje(destinatario, texto, botones = null, messageId = nu
       payload.text = { body: texto };
     }
 
-    // 3. CONTEXTO PARA VINCULAR CON EL MENSAJE ENTRANTE
+    // 3. CONTEXTO PARA VINCULAR CON EL MENSAJE ENTRANTE (Responder a...)
     if (messageId) {
       payload.context = { message_id: messageId };
     }
@@ -65,7 +69,17 @@ async function enviarMensaje(destinatario, texto, botones = null, messageId = nu
     });
 
     console.log(`[WA SERVICE] Mensaje entregado con éxito a Meta para ${idLimpio}`);
-    return response.data;
+
+    // =========================================================================
+    // 🛠 MODIFICACIÓN CLAVE: NORMALIZACIÓN DE RESPUESTA PARA LA BD INMUTABLE
+    // =========================================================================
+    // Meta responde con una estructura: { contacts: [...], messages: [{ id: "wamid.HBgM..." }] }
+    const generatedWamid = response.data?.messages?.[0]?.id || `outbound_fallback_${Date.now()}`;
+
+    return {
+      wamid: generatedWamid,      // Extraemos directamente el ID para mapearlo con la tabla 'messages'
+      rawPayload: response.data   // Guardamos la respuesta completa para la auditoría técnica en JSONB
+    };
 
   } catch (error) {
     console.error('[WA SERVICE ERROR]:', error.response ? error.response.data : error.message);
