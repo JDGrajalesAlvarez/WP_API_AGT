@@ -1,6 +1,7 @@
 // services/bot.service.js
 const sessionService = require('./session.service');
 const whatsappService = require('./whatsapp.service');
+const agentService = require('./agent.service');
 
 /**
  * Orquestador principal del Bot de WhatsApp.
@@ -103,8 +104,9 @@ async function procesarMensaje(telefono, texto, nombreUsuario, messageId, rawPay
       break;
 
     case sessionService.ESTADOS.ACEPTADO:
-      // BLOQUE DE IA: El usuario cuenta con autorización legal vigente, interactúa directo con el LLM
+      // BLOQUE DE IA: Usuario con consentimiento activo -> Delegamos a agentService
       await ejecutarAgenteIA(usuario.id, telefono, texto, messageId, rawPayload);
+      console.log("llamando a la IA para procesar la consulta del usuario...");
       break;
   }
 }
@@ -122,7 +124,7 @@ async function procesarMensaje(telefono, texto, nombreUsuario, messageId, rawPay
  * @returns {Promise<void>}
  */
 async function ejecutarSiguienteAccion(userId, telefono, nombreUsuario, inboundMessageId) {
-  const mensajeBienvenida = `¡Gracias por aceptar, ${nombreUsuario}! 🎉\n\n¿En qué te podemos ayudar hoy?`;
+  const mensajeBienvenida = `¡Gracias por aceptar, ${nombreUsuario}! \n\n¿En qué te podemos ayudar hoy?`;
 
   // Despacha mensaje saliente por medio del proveedor de WhatsApp
   const outboundMeta = await whatsappService.enviarMensaje(telefono, mensajeBienvenida);
@@ -151,17 +153,22 @@ async function ejecutarSiguienteAccion(userId, telefono, nombreUsuario, inboundM
  * @param {Object} rawPayload - Payload original de la interacción.
  * @returns {Promise<void>}
  */
+
 async function ejecutarAgenteIA(userId, telefono, texto, inboundMessageId, rawPayload) {
-  /* TODO: Integración completa de la pasarela de Inteligencia Artificial (ai.gateway.js)
-     1. Consultar el historial inmutable usando el userId para darle contexto a la IA:
-        const historial = await sessionService.obtenerHistorialChat(userId);
-     2. Enviar el texto actual + el historial al LLM:
-        const respuestaIA = await aiGateway.procesarConAgente(userId, texto, historial);
-     3. Despachar la respuesta de la IA al WhatsApp del usuario:
-        const outboundMeta = await whatsappService.enviarMensaje(telefono, respuestaIA);
-     4. Persistir el mensaje de la IA de forma inmutable:
-        await persistirMensajeSaliente(userId, outboundMeta, respuestaIA); 
-  */
+  try {
+    console.log(`[AGENT] Procesando consulta para el usuario UUID: ${userId}`);
+    const respuestaIA = await agentService.procesarConsultaConMemoria(userId, texto);
+    const outboundMeta = await whatsappService.enviarMensaje(telefono, respuestaIA);
+    await persistirMensajeSaliente(userId, outboundMeta, respuestaIA);
+
+  } catch (error) {
+    console.error('[BOT SERVICE ERROR - ejecutarAgenteIA]:', error.message);
+
+    // Mensaje de contingencia al usuario cuando se agote la cuota del proveedor
+    const msjFallback = "En este momento estoy experimentando un alto volumen de consultas. Por favor, escríbeme de nuevo en un momento.";
+    const outboundMeta = await whatsappService.enviarMensaje(telefono, msjFallback);
+    await persistirMensajeSaliente(userId, outboundMeta, msjFallback);
+  }
 }
 
 /**

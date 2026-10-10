@@ -195,6 +195,43 @@ async function guardarMensaje({ wamid, userId, direction, messageType, body, raw
 }
 
 /**
+ * Recupera los últimos N mensajes de un usuario y los da con formato para el SDK del LLM.
+ * 
+ * @param {string} userId - UUID del usuario en PostgreSQL
+ * @param {number} [limit=10] - Cantidad de mensajes a recuperar
+ * @returns {Promise<Array<{role: string, parts: Array<{text: string}>}>>}
+ */
+async function obtenerHistorialChat(userId, limit = 10) {
+  const query = `
+    SELECT direction, body, created_at 
+    FROM messages 
+    WHERE user_id = $1 
+      AND message_type = 'text'
+      AND body IS NOT NULL
+    ORDER BY created_at DESC 
+    LIMIT $2;
+  `;
+
+  try {
+    const res = await pool.query(query, [userId, limit]);
+
+    // Invertir el array para orden cronológico (más antiguo primero)
+    const filasCronologicas = res.rows.reverse();
+
+    // Transformar al formato que espera Gemini SDK:
+    // INBOUND -> 'user'
+    // OUTBOUND -> 'model'
+    return filasCronologicas.map((msg) => ({
+      role: msg.direction === 'INBOUND' ? 'user' : 'model',
+      parts: [{ text: msg.body }]
+    }));
+  } catch (error) {
+    console.error('[SESSION SERVICE ERROR - obtenerHistorialChat]:', error.message);
+    return []; // En caso de falla, retornamos historial vacío para no interrumpir el flujo
+  }
+}
+
+/**
  * Inserta un registro histórico sobre el cambio de estado de un mensaje entregado.
  * Esencial para alimentar la tabla particionada de trazabilidad horaria ('message_statuses').
  * 
@@ -254,6 +291,7 @@ module.exports = {
   obtenerEstadoUsuario,
   registrarConsentimiento,
   guardarMensaje,
+  obtenerHistorialChat,
   registrarEstadoMensaje,
   forzarEstadoPendiente
 };
