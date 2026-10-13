@@ -180,25 +180,36 @@ async function guardarMensaje({ wamid, userId, direction, messageType, body, raw
 }
 
 /**
- * Recupera los últimos N mensajes de un usuario y los da con formato para el SDK del LLM.
+ * Recupera el historial de chat pero filtra por un límite de inactividad (session timeout).
+ * Si el último mensaje es más antiguo que X horas, devolverá un historial vacío (nueva sesión).
  * 
  * @param {string} userId - UUID del usuario en PostgreSQL
- * @param {number} [limit=10] - Cantidad de mensajes a recuperar
- * @returns {Promise<Array<{role: string, parts: Array<{text: string}>}>>}
+ * @param {number} [limit=10] - Máximo de mensajes
+ * @param {number} [timeoutHoras=24] - Horas máximas de inactividad para mantener contexto
  */
-async function obtenerHistorialChat(userId, limit = 10) {
+async function obtenerHistorialChat(userId, limit = 10, timeoutHoras = 24) {
   const query = `
-    SELECT direction, body, created_at 
-    FROM messages 
-    WHERE user_id = $1 
-      AND message_type = 'text'
-      AND body IS NOT NULL
-    ORDER BY created_at DESC 
+    WITH ultimo_mensaje AS (
+      SELECT created_at 
+      FROM messages 
+      WHERE user_id = $1 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    )
+    SELECT m.direction, m.body, m.created_at 
+    FROM messages m, ultimo_mensaje u
+    WHERE m.user_id = $1 
+      AND m.message_type = 'text'
+      AND m.body IS NOT NULL
+      -- Si el último mensaje del usuario tiene más de N horas, no devuelve filas (resetea el chat para la IA)
+      AND u.created_at >= NOW() - ($3 || ' hours')::INTERVAL
+      AND m.created_at >= NOW() - ($3 || ' hours')::INTERVAL
+    ORDER BY m.created_at DESC 
     LIMIT $2;
   `;
 
   try {
-    const res = await pool.query(query, [userId, limit]);
+    const res = await pool.query(query, [userId, limit, timeoutHoras]);
 
     // Invertir el array para orden cronológico (más antiguo primero)
     const filasCronologicas = res.rows.reverse();
