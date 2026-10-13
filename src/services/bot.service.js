@@ -106,7 +106,6 @@ async function procesarMensaje(telefono, texto, nombreUsuario, messageId, rawPay
     case sessionService.ESTADOS.ACEPTADO:
       // BLOQUE DE IA: Usuario con consentimiento activo -> Delegamos a agentService
       await ejecutarAgenteIA(usuario.id, telefono, texto, messageId, rawPayload);
-      console.log("llamando a la IA para procesar la consulta del usuario...");
       break;
   }
 }

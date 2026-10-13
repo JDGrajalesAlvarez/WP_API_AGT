@@ -1,20 +1,5 @@
 // services/session.service.js
-const { Pool } = require('pg');
-
-/**
- * Pool de conexiones reutilizables hacia la base de datos PostgreSQL.
- * Configurado con límites de tiempo para evitar fugas de recursos en producción.
- */
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: Number(process.env.DB_PORT) || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: String(process.env.DB_PASSWORD || '1234'),
-  database: process.env.DB_NAME || 'api_whatsapp',
-  max: 20, // Máximo de conexiones simultáneas en el pool
-  idleTimeoutMillis: 30000, // Cierra conexiones inactivas después de 30 segundos
-  connectionTimeoutMillis: 2000, // Termina la espera si la conexión tarda más de 2 segundos
-});
+const { pool } = require('../config/database');
 
 /**
  * Máquina de estados finitos para el flujo de consentimiento de datos del usuario.
@@ -286,7 +271,6 @@ async function forzarEstadoPendiente(userId) {
 }
 
 module.exports = {
-  pool,
   ESTADOS,
   obtenerEstadoUsuario,
   registrarConsentimiento,
